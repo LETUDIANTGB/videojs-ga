@@ -6,7 +6,7 @@
 # Licensed under the MIT license.
 ##
 
-videojs.plugin 'ga', (options) ->
+videojs.plugin 'ga', (options = {}) ->
   # this loads options from the data-setup attribute of the video tag
   dataSetupOptions = {}
   if @options()["data-setup"]
@@ -20,12 +20,14 @@ videojs.plugin 'ga', (options) ->
   ]
   eventsToTrack = options.eventsToTrack || dataSetupOptions.eventsToTrack || deafultsEventsToTrack
   percentsPlayedInterval = options.percentsPlayedInterval || dataSetupOptions.percentsPlayedInterval || 10
+  eventActionPrefix = options.eventActionPrefix || dataSetupOptions.eventActionPrefix || ""
 
   eventCategory = options.eventCategory || dataSetupOptions.eventCategory || 'Video'
   # if you didn't specify a name, it will be 'guessed' from the video src after metadatas are loaded
   eventLabel = options.eventLabel || dataSetupOptions.eventLabel
 
   # init a few variables
+  _gaq = _gaq || []
   percentsAlreadyTracked = []
   seekStart = seekEnd = 0
   seeking = false
@@ -35,12 +37,12 @@ videojs.plugin 'ga', (options) ->
       eventLabel = @currentSrc().split("/").slice(-1)[0].replace(/\.(\w{3,4})(\?.*)?$/i,'')
 
     if "loadedmetadata" in eventsToTrack
-      _gaq.push(['_trackEvent', eventCategory, 'loadedmetadata', eventLabel])
+      trackEvent('loadedmetadata')
 
     if "srcType" in eventsToTrack
       tmpSrcArray = @currentSrc().split(".")
       sourceType = tmpSrcArray[tmpSrcArray.length - 1]
-      _gaq.push(['_trackEvent', eventCategory, 'srcType', "#{@techName}/#{sourceType}"])
+      trackEvent('srcType', "#{@techName}/#{sourceType}")
 
     return
 
@@ -53,9 +55,9 @@ videojs.plugin 'ga', (options) ->
       if percentPlayed >= percent && percent not in percentsAlreadyTracked
 
         if "start" in eventsToTrack && percent == 0 && percentPlayed > 0
-          _gaq.push(['_trackEvent', eventCategory, "start", eventLabel])
+          trackEvent('start')
         else if "percentsPlayed" in eventsToTrack && percentPlayed != 0
-          _gaq.push(['_trackEvent', eventCategory, "#{percent}%", eventLabel])
+          trackEvent("#{percent}")
 
         if percentPlayed > 0
           percentsAlreadyTracked.push(percent)
@@ -66,19 +68,18 @@ videojs.plugin 'ga', (options) ->
       # if the difference between the start and the end are greater than 1 it's a seek.
       if Math.abs(seekStart - seekEnd) > 1
         seeking = true
-        _gaq.push(['_trackEvent', eventCategory, 'seek start', eventLabel, seekStart])
-        _gaq.push(['_trackEvent', eventCategory, 'seek end', eventLabel, seekEnd])
-
+        trackEvent('seek start', seekStart)
+        trackEvent('seek end', seekEnd)
     return
 
   end = ->
-    _gaq.push(['_trackEvent', eventCategory, "end", eventLabel])
+    trackEvent('end')
     return
 
   play = ->
     currentTime = Math.round(@currentTime())
     if currentTime > 0 && !seeking
-      _gaq.push(['_trackEvent', eventCategory, 'play', eventLabel, currentTime])
+      trackEvent('play', currentTime)
     seeking = true
     return
 
@@ -86,32 +87,39 @@ videojs.plugin 'ga', (options) ->
     currentTime = Math.round(@currentTime())
     duration = Math.round(@duration())
     if currentTime != duration && !seeking
-      _gaq.push(['_trackEvent', eventCategory, 'pause', eventLabel, currentTime])
+      trackEvent('pause', currentTime)
     return
 
   # value between 0 (muted) and 1
   volumeChange = ->
     volume = if @muted() == true then 0 else @volume()
-    _gaq.push(['_trackEvent', eventCategory, 'volumeChange', eventLabel, volume])
+    trackEvent('volumeChange', volume)
     return
 
   resize = ->
-    _gaq.push(['_trackEvent', eventCategory, 'resize', eventLabel, "#{@width}*#{@height}"])
+    trackEvent('resize', "#{@width}*#{@height}")
     return
 
   error = ->
     currentTime = Math.round(@currentTime())
     # XXX: Is there some informations about the error somewhere ?
-    _gaq.push(['_trackEvent', eventCategory, 'error', eventLabel, currentTime])
+    trackEvent('error', currentTime)
     return
 
   fullscreen = ->
     currentTime = Math.round(@currentTime())
     if @isFullScreen
-      _gaq.push(['_trackEvent', eventCategory, 'enter fullscreen', eventLabel, currentTime])
+      trackEvent('enter fullscreen', currentTime)
     else
-      _gaq.push(['_trackEvent', eventCategory, 'exit fullscreen', eventLabel, currentTime])
+      trackEvent('exit fullscreen', currentTime)
     return
+
+  trackEvent = (actions, value) ->
+    prefixedActions = (eventActionPrefix + action for action in actions.split(" ")).join(' ')
+    gaArray = ['_trackEvent', eventCategory, prefixedActions, eventLabel]
+    if value
+      gaArray.push(value)
+    _gaq.push(gaArray)
 
   @on("loadedmetadata", loaded)
   @on("timeupdate", timeupdate)
